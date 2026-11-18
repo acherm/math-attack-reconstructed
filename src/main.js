@@ -1009,10 +1009,10 @@ const kt = {
       originalGameBtn: "🎮 Jeu original ↗",
       fullscreenBtn: "⛶ Plein écran",
       exitFullscreenBtn: "⛶ Quitter",
-      mode1pSubScreen: "Touche où aller • au-dessus de toi = saut",
+      mode1pSubScreen: "Touche où aller • glisse vers le haut = saut",
       modeCoopSubScreen: "Le perso le plus proche du doigt bouge",
       modeVersusSubScreen: "Le perso le plus proche du doigt bouge",
-      hudHintScreen: "👆 Touche où aller • au-dessus = saut",
+      hudHintScreen: "👆 Touche où aller • glisse ↑ = saut",
       controlsLabel: "CONTRÔLES :",
       controlsScreen: "👆 Toucher l'écran",
       controlsButtons: "🎮 Manette",
@@ -1092,10 +1092,10 @@ const kt = {
       originalGameBtn: "🎮 Original game ↗",
       fullscreenBtn: "⛶ Fullscreen",
       exitFullscreenBtn: "⛶ Exit",
-      mode1pSubScreen: "Tap where to go • above you = jump",
+      mode1pSubScreen: "Tap where to go • swipe up = jump",
       modeCoopSubScreen: "The hero nearest your finger moves",
       modeVersusSubScreen: "The hero nearest your finger moves",
-      hudHintScreen: "👆 Tap where to go • above = jump",
+      hudHintScreen: "👆 Tap where to go • swipe ↑ = jump",
       controlsLabel: "CONTROLS:",
       controlsScreen: "👆 Touch the screen",
       controlsButtons: "🎮 Gamepad",
@@ -4647,36 +4647,85 @@ class We extends pt.Scene {
             Math.hypot(a.x - wp.x, a.y - wp.y) <= Math.hypot(b.x - wp.x, b.y - wp.y) ? a : b,
           );
     if (hero.playerData.enteredDoor) return;
-    (hero.playerData.touch = {
+    hero.playerData.touch = {
       pointer,
       identifier: pointer.identifier,
       x: pt.Math.Clamp(wp.x, 0, 960),
       y: wp.y,
       lastX: hero.x,
       lastMoveAt: this.time.now,
-    }),
-      wp.y < hero.body.top - 6 && (hero.playerData.touchJumpQueued = !0);
+      swipeFromY: pointer.y, // lowest finger position since the last swipe-jump (canvas px)
+      swiped: !1, // after a swipe, no automatic jumps for this touch
+      autoJumps: 0,
+      nextAutoJumpAt: 0,
+      doubleDone: !1,
+    };
   }
+  // Jumping with "touch the screen" controls:
+  //  - swipe up anywhere = jump, keep sliding up = double jump (manual control);
+  //  - touch a platform higher than the hero = he climbs onto it by himself: platforms
+  //    are solid from below, so he first steps out from under it, jumps beside it,
+  //    double-jumps if needed, and only moves over it once he is higher than it;
+  //  - touch the sky above the hero = jump (double jump at the top if still lower).
   _touchMove(S, now) {
-    const d = S.playerData,
-      jump = !!d.touchJumpQueued;
+    const d = S.playerData;
+    let jump = !!d.touchJumpQueued;
     d.touchJumpQueued = !1;
     const t = d.touch;
     if (!t) return d.touchMarker.clear(), jump ? { left: !1, right: !1, jump } : null;
-    const held = t.pointer.isDown && t.pointer.identifier === t.identifier;
+    const held = t.pointer.isDown && t.pointer.identifier === t.identifier,
+      grounded = S.body.blocked.down || S.body.touching.down;
     if (held) {
+      const py = t.pointer.y,
+        swipe = 30 * this.scale.displayScale.y; // ≈ 30 CSS pixels, whatever the screen
+      py > t.swipeFromY
+        ? (t.swipeFromY = py)
+        : t.swipeFromY - py >= swipe && ((jump = !0), (t.swiped = !0), (t.swipeFromY = py));
       const wp = this.cameras.main.getWorldPoint(t.pointer.x, t.pointer.y);
-      (t.x = pt.Math.Clamp(wp.x, 0, 960)), (t.y = wp.y);
+      (t.x = pt.Math.Clamp(wp.x, 0, 960)), t.swiped || (t.y = wp.y);
     }
-    const dx = t.x - S.x;
+    const above = !t.swiped && t.y < S.body.top - 10,
+      canAuto = above && (held || t.autoJumps < 3),
+      P = canAuto ? this._platformUnder(t.x, t.y, S.body.bottom - 8) : null,
+      autoJump = () => {
+        (jump = !0), (t.autoJumps += 1), (t.nextAutoJumpAt = now + 450), (t.doubleDone = !1);
+      },
+      doubleJump = () => {
+        !t.doubleDone && d.jumpsUsed < 2 && S.body.velocity.y > -60 && ((jump = !0), (t.doubleDone = !0));
+      };
+    let goal = t.x,
+      precise = !1;
+    if (P) {
+      if (grounded) {
+        // walk to a take-off spot beside the platform, then jump
+        const k = (t.takeoff = this._takeoffFor(S, P));
+        if (k != null) {
+          const inWindow = k < P.left ? S.x >= k - 20 && S.x <= k + 4 : S.x <= k + 20 && S.x >= k - 4;
+          (goal = k), (precise = !0), inWindow && now >= t.nextAutoJumpAt && autoJump();
+        } else Math.abs(t.x - S.x) < 170 && now >= t.nextAutoJumpAt && autoJump(); // no clean spot: just try
+      } else
+        // in the air: stay beside the platform until higher than it, double-jump at the top
+        S.body.bottom > P.top + 2 && (t.takeoff != null && (goal = t.takeoff), doubleJump());
+    } else
+      canAuto &&
+        (grounded
+          ? Math.abs(t.x - S.x) < 170 && now >= t.nextAutoJumpAt && autoJump()
+          : t.y < S.body.bottom - 24 && doubleJump());
+    const gdx = goal - S.x;
     let left = !1,
       right = !1;
-    // dead zone ≈ the distance the hero slides when stopping (no left/right wobble)
-    Math.abs(dx) > 20 ? ((left = dx < 0), (right = dx > 0)) : held || (d.touch = null);
+    // dead zone ≈ the distance the hero slides when stopping (no left/right wobble),
+    // except when walking to a take-off spot, which must be reached precisely
+    Math.abs(gdx) > (precise ? 2 : 20) && ((left = gdx < 0), (right = gdx > 0)),
+      // finger lifted and hero at the spot: done, unless a jump toward it is under way
+      !held &&
+        Math.abs(t.x - S.x) <= 20 &&
+        (!above || (grounded && t.autoJumps > 0 && now >= t.nextAutoJumpAt)) &&
+        (d.touch = null);
     // after the finger is lifted, give up if the hero is stuck (e.g. against a wall)
     !held &&
       d.touch &&
-      (Math.abs(S.x - t.lastX) > 0.5
+      (Math.abs(S.x - t.lastX) > 0.5 || !grounded
         ? ((t.lastX = S.x), (t.lastMoveAt = now))
         : now - t.lastMoveAt > 350 && (d.touch = null));
     const m = d.touchMarker;
@@ -4689,6 +4738,56 @@ class We extends pt.Scene {
         m.fillCircle(t.x, t.y, 5)),
       { left, right, jump }
     );
+  }
+  // Where to jump from to land on platform P: beside it (platforms and bricks are solid
+  // from below), with nothing overhead up to the height of P, and on the surface the hero
+  // stands on (so he doesn't walk off it). Returns the closest such x, or null.
+  _takeoffFor(S, P) {
+    const half = S.body.width / 2,
+      head = S.body.top,
+      feet = S.body.bottom,
+      plats = this.platforms.getChildren().map((o) => o.body),
+      solids = [...plats, ...this.bricksGroup.getChildren().map((o) => o.body)],
+      support = plats.find((b) => Math.abs(b.top - feet) <= 3 && S.body.right > b.left && S.body.left < b.right);
+    if (!support) return null;
+    // [x - 20 .. x + 4] (or mirrored) is where the jump may start: check that whole column
+    const clear = (x, dir) => {
+        const l = x - half - 4 - (dir < 0 ? 20 : 4),
+          r = x + half + 4 + (dir < 0 ? 4 : 20);
+        return solids.every((b) => b.right <= l || b.left >= r || b.bottom <= P.top - 64 || b.bottom > head + 2);
+      },
+      onSupport = (x) => x + half - 6 > support.left && x - half + 6 < support.right && x >= half && x <= 960 - half;
+    let best = null;
+    for (const [x0, dir] of [
+      [P.left - half - 10, -1],
+      [P.right + half + 10, 1],
+    ])
+      for (let i = 0; i <= 20; i++) {
+        const x = x0 + dir * i * 6;
+        if (!onSupport(x)) break;
+        if (clear(x, dir)) {
+          (best == null || Math.abs(x - S.x) < Math.abs(best - S.x)) && (best = x);
+          break;
+        }
+      }
+    return best;
+  }
+  // The platform the player touched (its surface is at or a bit below the finger),
+  // ignoring platforms that are not higher than `maxTop` (the hero's feet).
+  _platformUnder(x, y, maxTop) {
+    let best = null;
+    for (const p of this.platforms.getChildren()) {
+      const b = p.body,
+        dy = b.top - y;
+      x < b.left - 10 ||
+        x > b.right + 10 ||
+        dy < -30 ||
+        dy > 90 ||
+        b.top >= maxTop ||
+        (best && Math.abs(dy) >= Math.abs(best.top - y)) ||
+        (best = { left: b.left, right: b.right, top: b.top });
+    }
+    return best;
   }
   // Keep the equation / hint text between the counter (left) and the buttons (right).
   _fitHudEquationText() {

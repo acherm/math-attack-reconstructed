@@ -33,7 +33,11 @@ npm run build      # site statique dans dist/ (chemins relatifs : GitHub Pages, 
 - **Loupe 🔍** dans le bandeau : 3 niveaux de zoom (la caméra suit le héros), mémorisés.
 - **Toucher l'écran pour jouer** (par défaut) :
   - touche l'endroit où tu veux aller : le héros y court (et suit le doigt s'il reste appuyé) ;
-  - touche **au-dessus** du héros : il saute ; touche encore en l'air : double saut ;
+  - **glisse le doigt vers le haut**, n'importe où (même au bord de l'écran) : il saute ;
+    continue de glisser vers le haut : double saut ;
+  - touche une **plateforme plus haute** : il y monte tout seul (il sort de dessous, se place
+    à côté, saute, fait le double saut si besoin, puis atterrit dessus) ;
+  - touche le ciel au-dessus de lui : il saute ;
   - à 2 joueurs, chaque doigt fait bouger le héros **le plus proche** de l'endroit touché
     (deux enfants peuvent jouer en même temps sur une tablette) ;
   - un petit cercle montre où le héros se dirige.
