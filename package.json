@@ -1,0 +1,18 @@
+{
+  "name": "math-attack-fr",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Ben & Alice : l'Attaque des Maths — version française et mobile",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
+  },
+  "devDependencies": {
+    "vite": "6.4.6"
+  }
+}

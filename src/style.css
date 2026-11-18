@@ -1,0 +1,261 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  background-color: #0f172a;
+  font-family: "Fredoka", "Nunito", "Comic Sans MS", "Chalkboard SE", system-ui, -apple-system, sans-serif;
+  color: #f8fafc;
+}
+
+/* Le jeu occupe tout l'écran visible ; dvh évite la barre d'adresse mobile. */
+#game-container {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  outline: none;
+}
+
+canvas {
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(255, 255, 255, 0.12);
+  touch-action: none;
+}
+
+/* Pendant une partie tactile, si l'écran est plus "haut" que 16:9 (tablette, téléphone
+   en portrait), on remonte le jeu pour que les manettes soient sous le terrain plutôt
+   que par-dessus. Sur un téléphone en paysage, il n'y a pas de place : rien ne change. */
+body.touch-playing #game-container {
+  bottom: min(
+    calc(clamp(58px, 15vmin, 92px) * 1.12 + max(10px, env(safe-area-inset-bottom)) + 8px),
+    max(0px, calc(100dvh - 56.25vw))
+  );
+  height: auto;
+}
+
+/* Sur petit écran, on gagne quelques pixels : pas de coins arrondis ni d'ombre. */
+@media (max-height: 500px), (max-width: 700px) {
+  canvas {
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+/* ---------- Manettes tactiles ---------- */
+
+#touch-controls {
+  --btn: clamp(58px, 15vmin, 92px);
+  --gap: clamp(8px, 2vmin, 14px);
+  --edge-x: max(10px, env(safe-area-inset-left), env(safe-area-inset-right));
+  --edge-y: max(10px, env(safe-area-inset-bottom));
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  touch-action: none;
+}
+
+#touch-controls[hidden] {
+  display: none;
+}
+
+.tc-cluster {
+  position: absolute;
+  bottom: var(--edge-y);
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gap);
+}
+
+.tc-cluster.left {
+  left: var(--edge-x);
+}
+
+.tc-cluster.right {
+  right: var(--edge-x);
+}
+
+.tc-tag {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
+}
+
+.tc-dpad,
+.tc-jump {
+  pointer-events: auto;
+  touch-action: none;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  color: #fff;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tc-dpad {
+  display: flex;
+  width: calc(var(--btn) * 2.1);
+  height: var(--btn);
+  border-radius: calc(var(--btn) / 2);
+  overflow: hidden;
+}
+
+.tc-dpad span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(var(--btn) * 0.42);
+  transition: background-color 60ms;
+}
+
+.tc-dpad span + span {
+  border-left: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+.tc-dpad span.on {
+  background: rgba(253, 224, 71, 0.55);
+}
+
+.tc-jump {
+  width: calc(var(--btn) * 1.12);
+  height: calc(var(--btn) * 1.12);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: calc(var(--btn) * 0.42);
+  transition: transform 60ms, background-color 60ms;
+}
+
+.tc-jump small {
+  font-size: calc(var(--btn) * 0.16);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.tc-jump.on {
+  background: rgba(74, 222, 128, 0.6);
+  transform: scale(0.94);
+}
+
+/* Couleurs par joueur (mode 2 joueurs) */
+.tc-cluster.p1 .tc-dpad,
+.tc-cluster.p1 .tc-jump {
+  border-color: rgba(147, 197, 253, 0.8);
+}
+
+.tc-cluster.p2 .tc-dpad,
+.tc-cluster.p2 .tc-jump {
+  border-color: rgba(249, 168, 212, 0.85);
+}
+
+.tc-cluster.p1 .tc-tag {
+  color: #93c5fd;
+}
+
+.tc-cluster.p2 .tc-tag {
+  color: #f9a8d4;
+}
+
+/* ---------- Invitation à tourner l'écran ---------- */
+
+#rotate-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.96);
+}
+
+#rotate-hint[hidden] {
+  display: none;
+}
+
+#rotate-hint p {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #fde047;
+}
+
+.rotate-phone {
+  font-size: 72px;
+  animation: rotate-phone 1.8s ease-in-out infinite;
+}
+
+@keyframes rotate-phone {
+  0%,
+  20% {
+    transform: rotate(0deg);
+  }
+  50%,
+  80% {
+    transform: rotate(-90deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotate-phone {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}
+
+#rotate-dismiss {
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 2px solid #93c5fd;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+  background: #1e293b;
+  cursor: pointer;
+}
+
+#rotate-dismiss:focus-visible {
+  outline: 3px solid #fde047;
+  outline-offset: 3px;
+}
