@@ -23,8 +23,65 @@ export function onTouchModeChange(cb) {
 function enableTouchMode() {
   if (touchMode) return;
   touchMode = true;
+  document.documentElement.classList.add("touch");
   updateRotateHint();
   listeners.forEach((cb) => cb());
+}
+
+// ---------------------------------------------------------------------------
+// Player preferences (remembered in localStorage)
+// ---------------------------------------------------------------------------
+
+function load(key, fallback) {
+  try {
+    return window.localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function save(key, value) {
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {}
+}
+
+const CONTROLS_KEY = "ben_alice_math_attack_controls";
+const ZOOM_KEY = "ben_alice_math_attack_zoom";
+
+/**
+ * How touch screens control the heroes:
+ *  - "screen":  touch where you want to go (above your hero = jump)
+ *  - "buttons": on-screen ◀ ▶ pad + jump button
+ */
+let controlStyle = load(CONTROLS_KEY, "screen") === "buttons" ? "buttons" : "screen";
+
+export function getControlStyle() {
+  return controlStyle;
+}
+
+export function setControlStyle(style) {
+  controlStyle = style === "buttons" ? "buttons" : "screen";
+  save(CONTROLS_KEY, controlStyle);
+  return controlStyle;
+}
+
+/** Extra zoom applied on top of "fill the screen" during a game (touch screens). */
+export const ZOOM_LEVELS = [1, 1.35, 1.75];
+let zoomIndex = Math.min(ZOOM_LEVELS.length - 1, Math.max(0, Number(load(ZOOM_KEY, 0)) || 0));
+
+export function getZoomFactor() {
+  return touchMode ? ZOOM_LEVELS[zoomIndex] : 1;
+}
+
+export function getZoomIndex() {
+  return zoomIndex;
+}
+
+export function cycleZoom() {
+  zoomIndex = (zoomIndex + 1) % ZOOM_LEVELS.length;
+  save(ZOOM_KEY, zoomIndex);
+  return zoomIndex;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +323,7 @@ function updateRotateHint() {
 
 export function initMobile() {
   if (typeof window === "undefined") return;
+  document.documentElement.classList.toggle("touch", touchMode);
 
   // Switch to touch UI as soon as someone touches the screen.
   window.addEventListener("touchstart", enableTouchMode, { passive: true, capture: true });

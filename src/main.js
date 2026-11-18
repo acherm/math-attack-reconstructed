@@ -11,6 +11,12 @@ import {
   isFullscreenAvailable,
   isFullscreen,
   toggleFullscreen,
+  getControlStyle,
+  setControlStyle,
+  getZoomFactor,
+  getZoomIndex,
+  cycleZoom,
+  ZOOM_LEVELS,
 } from "./touch-controls.js";
 
 initMobile();
@@ -1003,6 +1009,13 @@ const kt = {
       originalGameBtn: "🎮 Jeu original ↗",
       fullscreenBtn: "⛶ Plein écran",
       exitFullscreenBtn: "⛶ Quitter",
+      mode1pSubScreen: "Touche où aller • au-dessus de toi = saut",
+      modeCoopSubScreen: "Le perso le plus proche du doigt bouge",
+      modeVersusSubScreen: "Le perso le plus proche du doigt bouge",
+      hudHintScreen: "👆 Touche où aller • au-dessus = saut",
+      controlsLabel: "CONTRÔLES :",
+      controlsScreen: "👆 Toucher l'écran",
+      controlsButtons: "🎮 Manette",
     },
     en: {
       gameTitle: "Ben & Alice's Math Attack",
@@ -1079,6 +1092,13 @@ const kt = {
       originalGameBtn: "🎮 Original game ↗",
       fullscreenBtn: "⛶ Fullscreen",
       exitFullscreenBtn: "⛶ Exit",
+      mode1pSubScreen: "Tap where to go • above you = jump",
+      modeCoopSubScreen: "The hero nearest your finger moves",
+      modeVersusSubScreen: "The hero nearest your finger moves",
+      hudHintScreen: "👆 Tap where to go • above = jump",
+      controlsLabel: "CONTROLS:",
+      controlsScreen: "👆 Touch the screen",
+      controlsButtons: "🎮 Gamepad",
     },
   },
   ue = {
@@ -1181,7 +1201,11 @@ const kt = {
 function ht(it, X = {}) {
   const dict = kt[Gt] || kt.fr,
     touch = isTouchMode();
-  let W = (touch && (dict[it + "Touch"] ?? kt.en[it + "Touch"])) || (dict[it] ?? kt.en[it] ?? it);
+  const screen = touch && getControlStyle() === "screen";
+  let W =
+    (screen && (dict[it + "Screen"] ?? kt.en[it + "Screen"])) ||
+    (touch && (dict[it + "Touch"] ?? kt.en[it + "Touch"])) ||
+    (dict[it] ?? kt.en[it] ?? it);
   for (const [Z, K] of Object.entries(X)) W = W.replaceAll(`{${Z}}`, String(K));
   return touch ? hideKeyHints(W) : W;
 }
@@ -3249,15 +3273,24 @@ const ut = new be();
 // Adaptation: the original sends anonymous level events to the author's Google
 // Analytics property (with a consent dialog). This copy does not track anything.
 function Yt() {}
+// On touch screens the canvas fills the whole screen (Phaser "EXPAND" mode), so the
+// visible area can be wider (phones) or taller (tablets) than the 960x540 layout.
+// Menu and victory screens keep their layout, centered.
+function centerSceneCamera(scene) {
+  const cam = scene.cameras.main,
+    apply = () => cam.centerOn(480, 270);
+  apply(), scene.scale.on("resize", apply);
+  scene.events.once("shutdown", () => scene.scale.off("resize", apply));
+}
 class Ye extends pt.Scene {
   constructor() {
     super("MenuScene"), (this.selectedMode = oe()), (this.selectedLevel = 1);
   }
   create() {
-    (this.selectedMode = oe()), ut.startMusic("menu");
+    (this.selectedMode = oe()), ut.startMusic("menu"), centerSceneCamera(this);
     const X = this.add.graphics();
     X.fillGradientStyle(1973067, 1973067, 1981066, 1981066, 1),
-      X.fillRect(0, 0, 960, 540),
+      X.fillRect(-1200, 0, 3360, 540),
       X.fillStyle(2278750, 0.25),
       X.fillEllipse(220, 520, 480, 140),
       X.fillEllipse(740, 520, 520, 160),
@@ -3275,7 +3308,7 @@ class Ye extends pt.Scene {
     Y.width > 580 && Y.setScale(580 / Y.width),
       (this.menuSubtitleTxt = this.add
         .text(480, 96, ht("menuSubtitle"), {
-          fontSize: "14px",
+          fontSize: isTouchMode() ? "16px" : "14px",
           fontStyle: "bold",
           color: "#bae6fd",
         })
@@ -3287,7 +3320,7 @@ class Ye extends pt.Scene {
       this._createCharacterSkinPicker(874, 66, W.p2Prefix, `J2: ${W.p2Name}`),
       this.add
         .text(480, 144, ht("chooseMode"), {
-          fontSize: "14.5px",
+          fontSize: isTouchMode() ? "16px" : "14.5px",
           fontStyle: "bold",
           color: "#93c5fd",
         })
@@ -3320,7 +3353,7 @@ class Ye extends pt.Scene {
       }),
       this.add
         .text(480, 248, ht("chooseStage"), {
-          fontSize: "14.5px",
+          fontSize: isTouchMode() ? "16px" : "14.5px",
           fontStyle: "bold",
           color: "#93c5fd",
         })
@@ -3376,7 +3409,8 @@ class Ye extends pt.Scene {
         })
         .setOrigin(0.5)),
       this.footerTxt.width > 596 &&
-        this.footerTxt.setScale(596 / this.footerTxt.width);
+        this.footerTxt.setScale(596 / this.footerTxt.width),
+      isTouchMode() && (this.footerTxt.setVisible(!1), this._createControlStyleToggle());
     if (isFullscreenAvailable()) {
       const t = this.add.graphics();
       t.fillStyle(988970, 0.92),
@@ -3455,6 +3489,42 @@ class Ye extends pt.Scene {
           this.musicTxt.setColor(e ? "#fda4af" : "#4ade80"));
       });
   }
+  // Touch screens: choose between touching the screen and the on-screen gamepad.
+  _createControlStyleToggle() {
+    this.add
+      .text(262, 501, ht("controlsLabel"), {
+        fontSize: "15px",
+        fontStyle: "bold",
+        color: "#93c5fd",
+      })
+      .setOrigin(0.5);
+    [
+      { id: "screen", x: 455, label: ht("controlsScreen") },
+      { id: "buttons", x: 660, label: ht("controlsButtons") },
+    ].forEach(({ id, x, label }) => {
+      const on = getControlStyle() === id,
+        g = this.add.graphics();
+      g.fillStyle(on ? 2450411 : 1976635, 1),
+        g.lineStyle(on ? 3 : 1.5, on ? 16436245 : 4674921, 1),
+        g.fillRoundedRect(x - 98, 482, 196, 38, 10),
+        g.strokeRoundedRect(x - 98, 482, 196, 38, 10);
+      const t = this.add
+        .text(x, 501, label, {
+          fontSize: "16px",
+          fontStyle: "bold",
+          color: on ? "#fde047" : "#e2e8f0",
+        })
+        .setOrigin(0.5);
+      t.width > 184 && t.setScale(184 / t.width),
+        this.add
+          .zone(x, 501, 196, 44)
+          .setInteractive({ useHandCursor: !0 })
+          .on("pointerdown", () => {
+            getControlStyle() !== id &&
+              (ut.playOperatorSwitch(), setControlStyle(id), this.scene.restart());
+          });
+    });
+  }
   _createCharacterSkinPicker(X, Y, W, Z) {
     const K = Pt(),
       p = Ht(W);
@@ -3532,8 +3602,8 @@ class Ye extends pt.Scene {
     const X = Pt(),
       Y = this.add.container(0, 0).setDepth(500),
       W = this.add.graphics();
-    W.fillStyle(988970, 0.97), W.fillRect(0, 0, 960, 540);
-    const Z = this.add.zone(480, 270, 960, 540).setInteractive();
+    W.fillStyle(988970, 0.97), W.fillRect(-1200, -1200, 3360, 2940);
+    const Z = this.add.zone(480, 270, 3360, 2940).setInteractive();
     Y.add([W, Z]);
     const K = ht("skinsGalleryTitle"),
       p = this.add
@@ -3697,7 +3767,7 @@ class Ye extends pt.Scene {
         .setOrigin(0.5);
     c.width > W - 16 && c.setScale((W - 16) / c.width);
     const a = this.add
-      .text(0, 12, p, { fontSize: isTouchMode() ? "12.5px" : "11.5px", color: "#cbd5e1" })
+      .text(0, 12, p, { fontSize: isTouchMode() ? "13.5px" : "11.5px", color: "#cbd5e1" })
       .setOrigin(0.5);
     a.width > W - 16 && a.setScale((W - 16) / a.width);
     const n = this.add.zone(0, 0, W, Z).setInteractive({ useHandCursor: !0 });
@@ -3789,13 +3859,18 @@ class We extends pt.Scene {
       this._createSlimes(),
       this._createTraps(),
       this._createPlayers(),
-      this._createHud(),
+      this._initUiLayer(),
+      this._withUi(() => this._createHud()),
       this._setupControls(),
       this._setupCollisions(),
+      this._setupScreenTouch(),
+      this._setupCameras(),
       this._updateAllVisuals(),
       this.hudEquationText.setText(this.hudEquationText.text),
       Yt("level_start", this),
-      showTouchControls(this.gameMode, te(), ht("jumpBtn")),
+      isTouchMode() && getControlStyle() === "buttons"
+        ? showTouchControls(this.gameMode, te(), ht("jumpBtn"))
+        : hideTouchControls(),
       this.events.once("shutdown", hideTouchControls);
   }
   _restartLevel() {
@@ -4330,7 +4405,7 @@ class We extends pt.Scene {
     );
   }
   _createHud() {
-    const X = this.add.graphics();
+    const X = (this.hudBar = this.add.graphics());
     X.fillStyle(988970, 0.82),
       X.fillRect(0, 0, 960, 44),
       (this.hudCounterText = this.add.text(16, 11, "", {
@@ -4379,7 +4454,7 @@ class We extends pt.Scene {
         const S = ut.toggleMute();
         this.hudMuteBtn.setText(S ? "🔇" : "🎵"),
           this.hudMuteBtn.setColor(S ? "#fda4af" : "#4ade80"),
-          this._spawnFloatingText(
+          this._spawnUiFloatingText(
             480,
             80,
             ht(S ? "audioMutedToast" : "audioOnToast"),
@@ -4424,15 +4499,41 @@ class We extends pt.Scene {
         .setInteractive({ useHandCursor: !0 })
         .on("pointerdown", () => this._exitToMenu())),
       (this.hudLangBtn = Z),
+      isTouchMode() &&
+        (this.hudZoomBtn = this.add
+          .text(660, 12, this._zoomLabel(), {
+            fontSize: "13px",
+            fontStyle: "bold",
+            color: "#fde047",
+            backgroundColor: "#1e293b",
+            padding: { x: 5, y: 3 },
+          })
+          .setInteractive({ useHandCursor: !0 })
+          .on("pointerdown", () => {
+            ut.playOperatorSwitch(), cycleZoom(), this.hudZoomBtn.setText(this._zoomLabel()), this._applyViewport();
+          })),
       this._layoutHudForTouch(),
       this._fitHudEquationText();
   }
   // Touch screens: bigger HUD buttons (with an even bigger invisible hit area),
   // packed from the right edge, so small fingers can hit them.
   _layoutHudForTouch() {
+    // The HUD bar always spans the full screen width (the UI camera keeps the 960-wide
+    // HUD layout centered, so the screen's left/right edges are at L/R in HUD coordinates).
+    const W = this.scale.width,
+      L = -(W - 960) / 2,
+      R = 960 - L;
+    this.hudBar.clear().fillStyle(988970, 0.82).fillRect(L, 0, W, 44), this.hudCounterText.setX(L + 16);
     if (!isTouchMode()) return;
-    const btns = [this.hudUndoBtn, this.hudMuteBtn, this.hudLangBtn, this.hudRestartBtn, this.hudMenuBtn];
-    let x = 954;
+    const btns = [
+      this.hudZoomBtn,
+      this.hudUndoBtn,
+      this.hudMuteBtn,
+      this.hudLangBtn,
+      this.hudRestartBtn,
+      this.hudMenuBtn,
+    ].filter(Boolean);
+    let x = R - 6;
     for (let i = btns.length - 1; i >= 0; i--) {
       const b = btns[i];
       b.setFontSize(19), b.setPadding(10, 6, 10, 6), b.setOrigin(0, 0);
@@ -4442,7 +4543,152 @@ class We extends pt.Scene {
       b.input.hitArea.setTo(-4, -2, b.width + 8, b.height + 10);
       x -= 8;
     }
-    this.hudEquationText.setX(x - 4).setY(12);
+    this.hudEquationText.setX(x - 4).setY(12), this.hudEquationText.setText(this.hudEquationText.text);
+  }
+  _zoomLabel() {
+    return getZoomIndex() < ZOOM_LEVELS.length - 1 ? "🔍+" : "🔍−";
+  }
+  _spawnUiFloatingText(...args) {
+    return this._withUi(() => this._spawnFloatingText(...args));
+  }
+  // ---- Two cameras: the world (zoomable, follows the heroes) and the HUD (fixed) ----
+  _initUiLayer() {
+    (this.uiCam = null), (this._addingUi = !1);
+    const onAdded = (obj) => {
+      this._addingUi && (obj.__ui = !0),
+        this.uiCam && (obj.__ui ? this.cameras.main : this.uiCam).ignore(obj);
+    };
+    this.events.on("addedtoscene", onAdded),
+      this.events.once("shutdown", () => this.events.off("addedtoscene", onAdded));
+  }
+  _withUi(fn) {
+    const prev = this._addingUi;
+    this._addingUi = !0;
+    try {
+      return fn();
+    } finally {
+      this._addingUi = prev;
+    }
+  }
+  _setupCameras() {
+    (this.followTarget = this.add.zone(480, 270, 1, 1)),
+      (this.uiCam = this.cameras.add(0, 0, this.scale.width, this.scale.height)),
+      this.children.list.forEach((o) => (o.__ui ? this.cameras.main : this.uiCam).ignore(o)),
+      this.scale.on("resize", this._applyViewport, this),
+      this.events.once("shutdown", () => this.scale.off("resize", this._applyViewport, this)),
+      this._applyViewport();
+  }
+  // Fit the 960x540 level to the screen: fill the width on wide phones (cropping a bit of
+  // height, the camera follows the heroes), show everything on taller screens, then apply
+  // the player's extra zoom (🔍 button).
+  _applyViewport() {
+    if (!this.uiCam) return;
+    const W = this.scale.width,
+      H = this.scale.height,
+      cam = this.cameras.main,
+      base = W / H >= 960 / 540 ? W / 960 : Math.min(W / 960, H / 540),
+      zoom = base * getZoomFactor();
+    cam.setZoom(zoom),
+      W / zoom >= 959.5 && H / zoom >= 539.5
+        ? (cam.stopFollow(), cam.removeBounds(), cam.centerOn(480, 270))
+        : (cam.setBounds(0, 0, 960, 540), this._updateFollowTarget(), cam.startFollow(this.followTarget, !1, 0.12, 0.12));
+    // HUD: when the whole level is visible with free space above/below it (tablets),
+    // put the HUD bar just above the level and the level caption just below it, so they
+    // no longer cover the playfield. Otherwise (phones, zoomed in) they overlay it.
+    const band = Math.max(0, (H - 540 * cam.zoom) / 2),
+      hudTop = band >= 44 ? band - 44 : 0;
+    this.uiCam.setSize(W, H),
+      this.uiCam.setScroll(-(W - 960) / 2, -hudTop),
+      this.hudStageText.setY((band >= 26 ? H - band + 14 : H - 12) - hudTop),
+      this._layoutHudForTouch();
+  }
+  _updateFollowTarget() {
+    if (!this.followTarget || !this.players) return;
+    const act = this.players.filter((s) => !s.playerData.enteredDoor);
+    act.length &&
+      this.followTarget.setPosition(
+        act.reduce((s, p) => s + p.x, 0) / act.length,
+        act.reduce((s, p) => s + p.y, 0) / act.length,
+      );
+  }
+  // ---- "Touch the screen" controls ----
+  // Touch where the hero should go: they run there (and keep following a held finger).
+  // Touching above the hero makes them jump; tapping again in the air = double jump.
+  // In 2-player modes, each touch drives the hero closest to where it starts.
+  _setupScreenTouch() {
+    const colors = this.gameMode === "1p" ? [16638023] : [9684477, 16361684];
+    this.players.forEach((s, i) => {
+      (s.playerData.touch = null),
+        (s.playerData.touchJumpQueued = !1),
+        (s.playerData.touchMarker = this.add.graphics().setDepth(150)),
+        (s.playerData.touchColor = colors[i] ?? colors[0]);
+    });
+    const onDown = (pointer, over) => this._onScreenTouchDown(pointer, over);
+    this.input.on("pointerdown", onDown),
+      this.events.once("shutdown", () => this.input.off("pointerdown", onDown));
+  }
+  _onScreenTouchDown(pointer, over) {
+    if (
+      this.levelCompleted ||
+      !pointer.wasTouch ||
+      !isTouchMode() ||
+      getControlStyle() !== "screen" ||
+      (over && over.length) ||
+      (this.uiCam && pointer.y + this.uiCam.scrollY < 48)
+    )
+      return;
+    const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y),
+      candidates = this.players.filter((s) => !s.playerData.enteredDoor);
+    if (!candidates.length) return;
+    const hero =
+      this.gameMode === "1p"
+        ? this.players[0]
+        : candidates.reduce((a, b) =>
+            Math.hypot(a.x - wp.x, a.y - wp.y) <= Math.hypot(b.x - wp.x, b.y - wp.y) ? a : b,
+          );
+    if (hero.playerData.enteredDoor) return;
+    (hero.playerData.touch = {
+      pointer,
+      identifier: pointer.identifier,
+      x: pt.Math.Clamp(wp.x, 0, 960),
+      y: wp.y,
+      lastX: hero.x,
+      lastMoveAt: this.time.now,
+    }),
+      wp.y < hero.body.top - 6 && (hero.playerData.touchJumpQueued = !0);
+  }
+  _touchMove(S, now) {
+    const d = S.playerData,
+      jump = !!d.touchJumpQueued;
+    d.touchJumpQueued = !1;
+    const t = d.touch;
+    if (!t) return d.touchMarker.clear(), jump ? { left: !1, right: !1, jump } : null;
+    const held = t.pointer.isDown && t.pointer.identifier === t.identifier;
+    if (held) {
+      const wp = this.cameras.main.getWorldPoint(t.pointer.x, t.pointer.y);
+      (t.x = pt.Math.Clamp(wp.x, 0, 960)), (t.y = wp.y);
+    }
+    const dx = t.x - S.x;
+    let left = !1,
+      right = !1;
+    // dead zone ≈ the distance the hero slides when stopping (no left/right wobble)
+    Math.abs(dx) > 20 ? ((left = dx < 0), (right = dx > 0)) : held || (d.touch = null);
+    // after the finger is lifted, give up if the hero is stuck (e.g. against a wall)
+    !held &&
+      d.touch &&
+      (Math.abs(S.x - t.lastX) > 0.5
+        ? ((t.lastX = S.x), (t.lastMoveAt = now))
+        : now - t.lastMoveAt > 350 && (d.touch = null));
+    const m = d.touchMarker;
+    return (
+      m.clear(),
+      d.touch &&
+        (m.lineStyle(4, d.touchColor, held ? 0.95 : 0.6),
+        m.strokeCircle(t.x, t.y, 15),
+        m.fillStyle(d.touchColor, held ? 0.6 : 0.35),
+        m.fillCircle(t.x, t.y, 5)),
+      { left, right, jump }
+    );
   }
   // Keep the equation / hint text between the counter (left) and the buttons (right).
   _fitHudEquationText() {
@@ -4460,7 +4706,7 @@ class We extends pt.Scene {
     const X = this.counterP1.applyBrick("undo");
     X.accepted
       ? (ut.playBrickBump(),
-        this._spawnFloatingText(480, 90, X.shortLabel, "#4ade80"),
+        this._spawnUiFloatingText(480, 90, X.shortLabel, "#4ade80"),
         this._updateAllVisuals())
       : ut.playReject();
   }
@@ -4501,7 +4747,7 @@ class We extends pt.Scene {
         this.hudMuteBtn &&
           (this.hudMuteBtn.setText(X ? "🔇" : "🎵"),
           this.hudMuteBtn.setColor(X ? "#fda4af" : "#4ade80")),
-          this._spawnFloatingText(
+          this._spawnUiFloatingText(
             480,
             80,
             ht(X ? "audioMutedToast" : "audioOnToast"),
@@ -4596,7 +4842,7 @@ class We extends pt.Scene {
           this._morphBubblePickup(h, i.label), e.add(i.label), (s += 1);
         }
       const o = ht("suggestedSolution");
-      this._spawnHintBanner(o, r.formula),
+      this._withUi(() => this._spawnHintBanner(o, r.formula)),
         this.hudEquationText.setText(`💡 ${r.formula}`),
         this._burstParticles(W.baseX, W.baseY - 16, 16638023, 14),
         this._updateAllVisuals(!0);
@@ -5149,7 +5395,7 @@ class We extends pt.Scene {
     K.explode(Z), this.time.delayedCall(500, () => K.destroy());
   }
   update(X) {
-    if (this.levelCompleted) return;
+    if ((this._updateFollowTarget(), this.levelCompleted)) return;
     const tJ1 = consumeTouchJump("p1"),
       tJ2 = consumeTouchJump("p2"),
       Y = pt.Input.Keyboard.JustDown(this.keys.p1Jump) || tJ1,
@@ -5175,6 +5421,8 @@ class We extends pt.Scene {
           (a = this.keys.p1Right.isDown || touchState.p1.right || (this.gameMode === "1p" && p)),
           (n = Y || (this.gameMode === "1p" && (W || Z))))
         : ((c = K), (a = p), (n = Z));
+      const tm = this._touchMove(S, X);
+      tm && ((c = c || tm.left), (a = a || tm.right), (n = n || tm.jump));
       const r = 250,
         e = Math.floor(X / 130) % 2 === 1,
         s = X < t.cryingUntil;
@@ -5315,10 +5563,10 @@ class He extends pt.Scene {
         Qt("p2", this.newlyUnlockedSkin.id));
   }
   create() {
-    ut.startMusic("victory");
+    ut.startMusic("victory"), centerSceneCamera(this);
     const X = this.add.graphics();
     X.fillGradientStyle(988970, 988970, 1973067, 1973067, 1),
-      X.fillRect(0, 0, 960, 540);
+      X.fillRect(-1200, 0, 3360, 540);
     const Y = this.add.graphics();
     Y.fillStyle(1976635, 0.95),
       Y.lineStyle(4, 16436245, 1),
@@ -5763,19 +6011,45 @@ const Ke = {
     width: 960,
     height: 540,
     backgroundColor: "#0f172a",
-    scale: { mode: pt.Scale.FIT, autoCenter: pt.Scale.CENTER_BOTH },
+    // Touch screens: fill the whole screen (no black bars). Desktop: unchanged.
+    scale: {
+      mode: isTouchMode() ? pt.Scale.EXPAND : pt.Scale.FIT,
+      autoCenter: pt.Scale.CENTER_BOTH,
+    },
+    // Up to 3 fingers at once (2 players), and touches anywhere on the page count.
+    input: {
+      activePointers: 3,
+      touch: { target: typeof document < "u" ? document.getElementById("game-container") : null },
+    },
     physics: { default: "arcade", arcade: { gravity: { y: 920 }, debug: !1 } },
     scene: [we, Ye, We, He],
   },
   Ze = new pt.Game(Ke);
 typeof window < "u" && (window.__GAME__ = Ze);
 
+// Workaround for a Phaser 3.90 bug: on rotation, the ScaleManager refreshes *before*
+// reading the new parent size, then stores that size without refreshing again, so an
+// "EXPAND" game keeps its previous dimensions. Refresh once the new layout is in place.
+if (typeof window < "u") {
+  const relayout = () => {
+      Ze.scale.getParentBounds(), Ze.scale.refresh();
+    },
+    scheduleRelayout = () => {
+      requestAnimationFrame(relayout), setTimeout(relayout, 350);
+    };
+  window.addEventListener("resize", scheduleRelayout),
+    window.addEventListener("orientationchange", scheduleRelayout),
+    screen.orientation?.addEventListener?.("change", scheduleRelayout);
+}
+
 // When a touchscreen is used for the first time (e.g. touchscreen laptop),
 // switch the current screen to its touch-friendly version.
 onTouchModeChange(() => {
-  if (Ze.scene.isActive("MenuScene")) Ze.scene.getScene("MenuScene").scene.restart();
+  (Ze.scale.scaleMode = pt.Scale.EXPAND), Ze.scale.refresh();
+  for (const k of ["MenuScene", "VictoryScene"]) Ze.scene.isActive(k) && Ze.scene.getScene(k).scene.restart();
   if (Ze.scene.isActive("GameScene")) {
     const g = Ze.scene.getScene("GameScene");
-    showTouchControls(g.gameMode, te(), ht("jumpBtn"));
+    g._applyViewport(),
+      getControlStyle() === "buttons" && showTouchControls(g.gameMode, te(), ht("jumpBtn"));
   }
 });

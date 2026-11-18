@@ -53,7 +53,13 @@ body.touch-playing #game-container {
   height: auto;
 }
 
-/* Sur petit écran, on gagne quelques pixels : pas de coins arrondis ni d'ombre. */
+/* Sur écran tactile le jeu remplit tout l'écran ; sur petit écran on gagne aussi
+   quelques pixels : pas de coins arrondis ni d'ombre. */
+html.touch canvas {
+  border-radius: 0;
+  box-shadow: none;
+}
+
 @media (max-height: 500px), (max-width: 700px) {
   canvas {
     border-radius: 0;

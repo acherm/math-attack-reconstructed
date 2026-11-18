@@ -27,13 +27,25 @@ npm run build      # site statique dans dist/ (chemins relatifs : GitHub Pages, 
   (« Too High! », « ×10 Shift! », « Slime bump! », « Mode: », « LOCKED »…).
 
 ### Mobile et tablette
-- **Manettes tactiles** pendant la partie (uniquement sur écran tactile) :
+- **Jeu en plein écran** sur téléphone et tablette, sans bandes noires : sur un téléphone
+  le niveau occupe toute la largeur (la caméra suit les héros verticalement) ; sur une
+  tablette tout le niveau est visible, avec le bandeau au-dessus et la légende en dessous.
+- **Loupe 🔍** dans le bandeau : 3 niveaux de zoom (la caméra suit le héros), mémorisés.
+- **Toucher l'écran pour jouer** (par défaut) :
+  - touche l'endroit où tu veux aller : le héros y court (et suit le doigt s'il reste appuyé) ;
+  - touche **au-dessus** du héros : il saute ; touche encore en l'air : double saut ;
+  - à 2 joueurs, chaque doigt fait bouger le héros **le plus proche** de l'endroit touché
+    (deux enfants peuvent jouer en même temps sur une tablette) ;
+  - un petit cercle montre où le héros se dirige.
+- **Ou une manette à l'écran** (au choix dans le menu : « Contrôles : 👆 Toucher l'écran / 🎮 Manette ») :
   - 1 joueur : pavé ◀ ▶ à gauche, bouton **SAUT** à droite (toucher 2× = double saut).
     On peut glisser le doigt de ◀ à ▶ sans le lever.
   - 2 joueurs sur une tablette : chaque enfant a sa manette, **J2 à gauche, J1 à droite**
     (comme au clavier : Z/Q/D à gauche, flèches à droite).
-- Sur tablette, le terrain remonte pour que les manettes soient **sous** le jeu et pas par-dessus.
-- Boutons du bandeau (annuler, son, langue, recommencer, menu) plus gros, avec une zone tactile élargie.
+- Textes du menu plus grands ; boutons du bandeau (zoom, annuler, son, langue, recommencer, menu)
+  plus gros, avec une zone tactile élargie.
+- Le jeu se réadapte quand on tourne l'écran en cours de partie (avec un contournement d'un bug
+  de Phaser 3.90 qui gardait l'ancienne taille après une rotation).
 - Les raccourcis clavier (`[K]`, `[ESC]`, « ESPACE / ENTRÉE »…) sont masqués sur écran tactile,
   et les textes d'aide parlent des boutons à l'écran.
 - Invitation à **tourner le téléphone** en paysage (avec un bouton « Jouer quand même »).
@@ -72,7 +84,7 @@ points d'accroche dans le jeu).
 ```
 index.html               page, méta mobiles, manifeste
 src/main.js              le jeu (Phaser) — récupéré de la version en ligne + adaptations
-src/touch-controls.js    manettes tactiles, plein écran, invitation à tourner l'écran
+src/touch-controls.js    manette à l’écran, préférences (contrôles, zoom), plein écran, rotation
 src/style.css            mise en page plein écran et style des manettes
 public/assets/characters sprites de Ben et Alice
 public/manifest.webmanifest, icônes
