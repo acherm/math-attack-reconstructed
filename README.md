@@ -8,7 +8,7 @@ Un jeu de plateforme pour apprendre le calcul (7-10 ans) : on attrape des bulles
 
 ## Jouer
 
-👉 **En ligne : <https://acherm.github.io/math-attack/>** (ordinateur, tablette ou téléphone)
+👉 **En ligne : <https://blog.mathieuacher.com/math-attack/>** (ordinateur, tablette ou téléphone)
 
 En local :
 
